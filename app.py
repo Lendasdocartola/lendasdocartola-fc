@@ -134,7 +134,7 @@ if 'seed_campo' not in st.session_state:
     st.session_state.seed_campo = 0
 
 with st.sidebar:
-    st.markdown("<h2 class='orange-title'>CARTOLA AI</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='orange-title'>CARTOLA  2026</h2>", unsafe_allow_html=True)
     # Trocado para o ícone de prancheta (📋) conforme pedido
     menu = st.radio("Menu:", ["🏠 Dashboard", "⚽ Minhas Dicas", "🔍 Raio-X do Craque", "📋 Quadro Tático", "📊 Central Probabilidades", "🧠 Radar de Capitão", "🔥 Termômetro", "💰 Simulador de Valorização", "🏟️ Análise de Confrontos", "📈 Histórico"])
     
@@ -142,117 +142,246 @@ with st.sidebar:
 
 df_active = df[df['status_id'] == 7] if status_filter else df
 
-# --- DASHBOARD ---
+# --- 🏠 DASHBOARD (V99.0 - DESIGN SHADOW & BOLSA DE VALORES) ---
 if menu == "🏠 Dashboard":
-    st.markdown("<h1 class='orange-title'>🏠 Painel Analítico</h1>", unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        avg_pos = df_active.groupby('pos_nome')['media_num'].mean().reset_index()
-        fig1 = px.bar(avg_pos, x='pos_nome', y='media_num', title="Eficiência por Posição", template="plotly_white", color_discrete_sequence=['#ff6600'])
-        st.plotly_chart(fig1, use_container_width=True)
-    with c2:
-        top_clubes = df_active.groupby('time_nome')['media_num'].sum().nlargest(6).reset_index()
-        fig2 = px.pie(top_clubes, values='media_num', names='time_nome', title="Potência por Clube", hole=.4, template="plotly_white")
-        st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("<h1 class='orange-title'>🏠 Dashboard Analytics</h1>", unsafe_allow_html=True)
 
+    # --- 1. CARDS DE RESUMO (KPIs) ---
+    c1, c2, c3, c4 = st.columns(4)
+    
+    total_jogadores = len(df_active)
+    media_preco = df_active['preco_num'].mean()
+    idx_max = df_active['pontos_num'].idxmax()
+    craque_rodada = df_active.loc[idx_max]
+    total_clubes = 20  # AJUSTADO PARA 20 TIMES
 
-# --- ⚽ MINHAS DICAS (V78.0 - SINCRONIZAÇÃO COM ESCALAÇÃO VISUAL) ---
+    def kpi_card(titulo, valor, sub):
+        return f"""
+        <div style="background: white; border: 3px solid #000; padding: 15px; border-radius: 12px; box-shadow: 5px 5px 0px #FF6600; text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 10px; font-weight: 900; color: #666; text-transform: uppercase;">{titulo}</div>
+            <div style="font-size: 24px; font-weight: 900; color: #000;">{valor}</div>
+            <div style="font-size: 10px; color: #FF6600; font-weight: bold;">{sub}</div>
+        </div>
+        """
+
+    with c1: st.markdown(kpi_card("Atletas Ativos", total_jogadores, "NA BASE LIVE"), unsafe_allow_html=True)
+    with c2: st.markdown(kpi_card("Preço Médio", f"C$ {media_preco:.2f}", "POR JOGADOR"), unsafe_allow_html=True)
+    with c3: st.markdown(kpi_card("Maior Pontuação", f"{craque_rodada['pontos_num']:.2f}", craque_rodada['apelido'].upper()), unsafe_allow_html=True)
+    with c4: st.markdown(kpi_card("Clubes", total_clubes, "SÉRIE A 2026"), unsafe_allow_html=True)
+
+    # --- 2. ÁREA DE GRÁFICOS ---
+    col_graf1, col_graf2 = st.columns(2)
+
+    with col_graf1:
+        st.markdown('<div style="background:white; border:3px solid #000; padding:15px; border-radius:12px; box-shadow: 6px 6px 0px #000; color:#000;">', unsafe_allow_html=True)
+        st.markdown("<b style='color:#000'>📊 MÉDIA DE PONTOS POR POSIÇÃO</b>", unsafe_allow_html=True)
+        df_pos = df_active.groupby('pos_nome')['media_num'].mean().sort_values(ascending=False).reset_index()
+        st.bar_chart(df_pos.set_index('pos_nome'), color="#FF6600")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_graf2:
+        st.markdown('<div style="background:white; border:3px solid #000; padding:15px; border-radius:12px; box-shadow: 6px 6px 0px #000; color:#000;">', unsafe_allow_html=True)
+        st.markdown("<b style='color:#000'>💰 TOP 10 CLUBES MAIS VALIOSOS</b>", unsafe_allow_html=True)
+        df_money = df_active.groupby('time_nome')['preco_num'].sum().sort_values(ascending=False).head(10).reset_index()
+        st.bar_chart(df_money.set_index('time_nome'), color="#000000")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # --- 3. TOP 5 MITOS (DESIGN RX) ---
+    st.markdown("### 🏆 Top 5 Mitos da Última Rodada")
+    top5 = df_active.sort_values('pontos_num', ascending=False).head(5)
+    cols_top = st.columns(5)
+
+    for i, (idx, p) in enumerate(top5.iterrows()):
+        with cols_top[i]:
+            st.markdown(f"""
+            <div style="background: white; border: 2px solid #000; border-radius: 10px; padding: 10px; text-align: center; box-shadow: 4px 4px 0px #FF6600;">
+                <img src="{p['foto'].replace('FORMATO','140x140')}" width="70" style="border-radius: 50%; border: 2px solid #000;">
+                <div style="font-size: 12px; font-weight: 900; color: #000; margin-top: 5px; text-transform: uppercase;">{p['apelido']}</div>
+                <div style="background: #000; color: #fff; border-radius: 5px; font-size: 14px; font-weight: 900; margin-top: 5px; padding: 2px 0;">{p['pontos_num']:.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # --- 4. GRÁFICO ESTILO BOLSA DE VALORES (ÁREA) ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div style="background:white; border:3px solid #000; padding:15px; border-radius:12px; box-shadow: 6px 6px 0px #FF6600; color:#000;">', unsafe_allow_html=True)
+    st.markdown("<b style='color:#000'>📈 OSCILAÇÃO DE PERFORMANCE (TOP 20 ATLETAS DA RODADA)</b>", unsafe_allow_html=True)
+    
+    # Criando um DF com os 20 melhores para o gráfico de área (estilo bolsa)
+    df_bolsa = df_active.sort_values('pontos_num', ascending=False).head(20)[['apelido', 'pontos_num']]
+    st.area_chart(df_bolsa.set_index('apelido'), color="#FF6600")
+    
+    st.markdown("<p style='font-size:10px; color:#666; font-weight:bold;'>ESTE GRÁFICO MOSTRA A VOLATILIDADE DE PONTUAÇÃO ENTRE OS MELHORES DA RODADA.</p>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --- ⚽ MINHAS DICAS (V79.0 - DESIGN SHADOW ARENA) ---
 elif menu == "⚽ Minhas Dicas":
+    # CSS para padronizar os inputs com a identidade visual
     st.markdown("""
         <style>
             .stSelectbox div[data-baseweb="select"], .stMultiSelect div[data-baseweb="select"], .stNumberInput div {
-                border: 2px solid #FF6600 !important;
-                background-color: #f9f9f9 !important;
+                border: 3px solid #000 !important;
+                border-radius: 10px !important;
+                box-shadow: 4px 4px 0px #FF6600 !important;
             }
-            label { color: #000 !important; font-weight: bold !important; }
+            label { color: #000 !important; font-weight: 900 !important; text-transform: uppercase; font-size: 14px; }
         </style>
     """, unsafe_allow_html=True)
 
     st.markdown("<h1 class='orange-title'>⚽ Cadastro de Dicas Na Rodada</h1>", unsafe_allow_html=True)
     
-    c_rodada, c_pos = st.columns([1, 2])
-    with c_rodada:
-        rodada_sel = st.number_input("Rodada:", min_value=1, max_value=38, value=rodada_atual)
-    with c_pos:
-        pos = st.selectbox("Posição:", ["Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante", "Técnico"])
-    
-    df_filtrado = df_active[df_active['pos_nome'] == pos].copy()
-    
-    def get_nome_clube(cid):
-        return clubes_raw[str(cid)]['nome'].upper() if str(cid) in clubes_raw else "TIME"
+    # Formulário Estilizado
+    with st.container():
+        st.markdown('<div style="background:#f9f9f9; padding:20px; border-radius:15px; border:3px solid #000; margin-bottom:25px;">', unsafe_allow_html=True)
+        c_rodada, c_pos = st.columns([1, 2])
+        with c_rodada:
+            rodada_sel = st.number_input("Rodada Atual:", min_value=1, max_value=38, value=rodada_atual)
+        with c_pos:
+            pos = st.selectbox("Selecione a Posição para Dica:", ["Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante", "Técnico"])
+        
+        df_filtrado = df_active[df_active['pos_nome'] == pos].copy()
+        
+        def get_nome_clube(cid):
+            return clubes_raw[str(cid)]['nome'].upper() if str(cid) in clubes_raw else "TIME"
 
-    df_filtrado['label_completo'] = df_filtrado.apply(lambda x: f"{get_nome_clube(x['clube_id'])} | {x['apelido']}", axis=1)
-    opcoes_dicas = df_filtrado.sort_values('media_num', ascending=False)['label_completo'].tolist()
-    
-    selecionados_labels = st.multiselect("Selecione até 5 Gladiadores para suas Dicas:", options=opcoes_dicas, max_selections=5)
-    
+        df_filtrado['label_completo'] = df_filtrado.apply(lambda x: f"{get_nome_clube(x['clube_id'])} | {x['apelido']}", axis=1)
+        opcoes_dicas = df_filtrado.sort_values('media_num', ascending=False)['label_completo'].tolist()
+        
+        selecionados_labels = st.multiselect("Escolha até 5 Gladiadores (Os melhores aparecem primeiro):", options=opcoes_dicas, max_selections=5)
+        st.markdown('</div>', unsafe_allow_html=True)
+
     if selecionados_labels:
         df_comp = df_filtrado[df_filtrado['label_completo'].isin(selecionados_labels)].copy()
         
-        # Exibição dos Cards (Design Shadow)
+        # Grid de Cards com Design Shadow (Igual ao RX)
         cols = st.columns(len(selecionados_labels))
         for i, (index, p) in enumerate(df_comp.iterrows()):
-            card = f"""
-            <div style="background:#000; border-radius:15px; padding:15px; text-align:center; border-bottom:5px solid #ff6600; color:#fff; height:500px; border: 1px solid #eee;">
-                <img src="{p.get('time_escudo', '')}" width="30"><br>
-                <div style="font-size:10px; font-weight:bold; color:#FF6600;">{get_nome_clube(p['clube_id'])}</div>
-                <img src="{p["foto"].replace("FORMATO","140x140")}" width="80" style="border-radius:50%; border:2px solid #ff6600; margin:10px 0;">
-                <div style="font-size:16px; font-weight:800;">{p['apelido']}</div>
-                <div style="color:#FF6600; font-weight:800; font-size:20px;">C$ {p["preco_num"]}</div>
-                <div style="background:#fff; border-radius:10px; padding:10px; text-align:left; color:#333; margin-top:10px;">
-                    <div style="color:#000; font-weight:800; font-size:10px;">MÉDIA</div>
-                    <div style="color:#ff6600; font-weight:800; font-size:18px;">{p['media_num']:.2f}</div>
+            with cols[i]:
+                st.markdown(f"""
+                <div style="background: white; border: 4px solid #000; border-radius: 15px; padding: 15px; box-shadow: 8px 8px 0px #FF6600; text-align: center; min-height: 380px;">
+                    <img src="{p.get('time_escudo', '')}" width="35"><br>
+                    <div style="font-size:11px; font-weight:900; color:#000; margin-top:5px;">{get_nome_clube(p['clube_id'])}</div>
+                    <img src="{p["foto"].replace("FORMATO","140x140")}" width="100" style="border-radius:50%; border:3px solid #000; margin:10px 0; background:#f0f0f0;">
+                    <div style="font-size:18px; font-weight:900; color:#000; text-transform:uppercase; line-height:1.1;">{p['apelido']}</div>
+                    <div style="background:#FF6600; color:#000; padding:5px; border-radius:5px; font-weight:900; font-size:16px; margin:10px 0;">C$ {p["preco_num"]}</div>
+                    <div style="border-top: 2px solid #eee; pt-10px">
+                        <span style="font-size:10px; font-weight:900; color:#666;">MÉDIA</span><br>
+                        <span style="font-size:22px; font-weight:900; color:#000;">{p['media_num']:.2f}</span>
+                    </div>
                 </div>
-            </div>"""
-            with cols[i]: components.html(card, height=520)
+                """, unsafe_allow_html=True)
         
-        # --- BOTÃO DE GRAVAÇÃO CORRIGIDO PARA ENVIAR PARA ESCALAÇÃO VISUAL ---
-        if st.button(f"💾 ENVIAR PARA ESCALAÇÃO VISUAL - R{rodada_sel}"):
-            # Prepara os dados no formato que a Escalação Visual entende
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # --- BOTÃO DE GRAVAÇÃO COM MENSAGEM ATUALIZADA ---
+        if st.button(f"🚀 GRAVAR DICAS DE {pos.upper()} NA RODADA {rodada_sel}"):
             lista_para_enviar = df_comp.to_dict('records')
             
             # 1. Salva no Histórico
-            if 'historico_arena' not in st.session_state: st.session_state.historico_arena = {}
-            if rodada_sel not in st.session_state.historico_arena: st.session_state.historico_arena[rodada_sel] = {}
+            if 'historico_arena' not in st.session_state: st.session_state.historico_arena = {r: {} for r in range(1, 39)}
             st.session_state.historico_arena[rodada_sel][pos] = lista_para_enviar
             
-            # 2. Salva no Time Escalado (Onde a Escalação Visual busca)
+            # 2. Salva no Time Escalado (Onde o Quadro Tático busca)
             if 'time_escalado' not in st.session_state: st.session_state.time_escalado = {}
             st.session_state.time_escalado[pos] = lista_para_enviar
             
-            st.success(f"✅ Sucesso! Os jogadores de {pos} agora aparecerão no menu Escalação Visual.")
+            # MENSAGEM CORRIGIDA COM DESIGN SHADOW
+            st.markdown(f"""
+                <div style="background: #000; color: #fff; padding: 20px; border-radius: 10px; border-left: 10px solid #FF6600; font-weight: 900; font-size: 18px; box-shadow: 5px 5px 15px rgba(0,0,0,0.3);">
+                    ✅ SUCESSO! AS DICAS DE {pos.upper()} FORAM ENVIADAS PARA O QUADRO TÁTICO.
+                </div>
+            """, unsafe_allow_html=True)
 
-# --- RAIO-X DO CRAQUE ---
+# --- 🔍 RAIO-X DO CRAQUE (V95.0 - FOCO NO SIMPLES E CORRETO) ---
 elif menu == "🔍 Raio-X do Craque":
-    st.markdown("<h1 class='orange-title'>🔍 Raio-X do Craque</h1>", unsafe_allow_html=True)
-    atleta = st.selectbox("Escolha o Atleta:", df_active['apelido'].sort_values())
-    p = df_active[df_active['apelido'] == atleta].iloc[0]
-    c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        st.image(p['foto'].replace("FORMATO","140x140"), width=180)
-        st.markdown(f"### {p['apelido']}")
-        st.image(p['time_escudo'], width=50)
-        st.metric("Média", p['media_num'])
-        st.metric("Preço", f"C$ {p['preco_num']}")
-    with c2:
-        st.subheader("📊 Atributos")
-        radar_data = pd.DataFrame(dict(r=[p.get('G',0)*3, p.get('A',0)*3, p.get('DS',0), p.get('FS',0), p.get('FD',0)], theta=['Gols','Assis','Desarmes','Faltas S','Finaliz.']))
-        fig_radar = px.line_polar(radar_data, r='r', theta='theta', line_close=True, template="plotly_white", color_discrete_sequence=['#ff6600'])
-        st.plotly_chart(fig_radar, use_container_width=True)
-    with c3:
-        st.subheader("🗺️ Mapa de Calor de Scouts")
-        z = np.zeros((10, 10))
-        if p['pos_nome'] == 'Atacante': z[7:10, 3:7] += p.get('G',0) + p.get('FD',0)
-        elif p['pos_nome'] == 'Meia': z[4:8, 2:8] += p.get('A',0) + p.get('DS',0)
-        elif p['pos_nome'] == 'Zagueiro': z[1:4, 2:8] += p.get('DS',0) + p.get('FC',0)
-        else: z[0:2, 4:6] += p.get('DE',0)
-        fig_heat = px.imshow(z, color_continuous_scale='Oranges', aspect="auto", template="plotly_white")
-        st.plotly_chart(fig_heat, use_container_width=True)
+    st.markdown("<h1 class='orange-title'>🔍 Raio-X Detalhado do Craque</h1>", unsafe_allow_html=True)
 
-# --- 📋 QUADRO TÁTICO (V81.0 - CÓDIGO COMPLETO E CORRIGIDO) ---
+    col_sel, col_stats = st.columns([1, 1])
+    
+    with col_sel:
+        c1, c2 = st.columns(2)
+        with c1:
+            lista_clubes = sorted([c['nome'] for c in clubes_raw.values()])
+            clube_sel = st.selectbox("Filtrar Time:", ["Todos"] + lista_clubes)
+        with c2:
+            pos_sel = st.selectbox("Filtrar Posição:", ["Todas", "Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante"])
+
+        df_busca = df_active.copy()
+        if clube_sel != "Todos":
+            clube_id_sel = next((cid for cid, info in clubes_raw.items() if info['nome'] == clube_sel), None)
+            if clube_id_sel: df_busca = df_busca[df_busca['clube_id'] == int(clube_id_sel)]
+        if pos_sel != "Todas":
+            df_busca = df_busca[df_busca['pos_nome'] == pos_sel]
+
+        lista_atletas = df_busca.sort_values('media_num', ascending=False)['apelido'].tolist()
+        
+        if not lista_atletas:
+            st.warning("⚠️ Nenhum gladiador encontrado.")
+            busca_atleta = None
+        else:
+            busca_atleta = st.selectbox("Escolher Gladiador:", options=lista_atletas)
+            atleta = df_busca[df_busca['apelido'] == busca_atleta].iloc[0]
+            
+            st.markdown("---")
+            fundamento = st.selectbox("Analisar Fundamento no Mapa:", ["Geral (Média)", "Gols (G)", "Finalizações (FD/FF)", "Desarmes (DS)", "Assistências (A)"])
+            
+            # DESIGN SHADOW BONITO (MANTIDO)
+            st.markdown(f"""
+            <div style="background: white; border: 4px solid #000; border-radius: 15px; padding: 20px; box-shadow: 10px 10px 0px #FF6600; text-align: center;">
+                <img src="{atleta['time_escudo']}" width="40"><br>
+                <img src="{atleta['foto'].replace("FORMATO","140x140")}" width="130" style="border-radius: 50%; border: 4px solid #000; margin: 15px 0;">
+                <div style="font-size: 22px; font-weight: 900; color: #000; text-transform: uppercase;">{atleta['apelido']}</div>
+                <div style="background: #FF6600; color: #000; display: inline-block; padding: 2px 12px; border-radius: 5px; font-weight: 900; margin-top: 5px;">{atleta['pos_nome'].upper()}</div>
+            </div>""", unsafe_allow_html=True)
+
+    with col_stats:
+        if busca_atleta:
+            # --- MAPA DE CALOR DINÂMICO ---
+            t, l, s, val_scout = 50, 50, 100, 0.0
+            if "Gols" in fundamento: t, l, s, val_scout = 50, 85, 130, float(atleta.get('G', 0))
+            elif "Finalizações" in fundamento: t, l, s, val_scout = 40, 75, 120, float(atleta.get('FD', 0) + atleta.get('FF', 0))
+            elif "Desarmes" in fundamento: l = 22 if atleta['pos_nome'] in ['Zagueiro', 'Goleiro', 'Lateral'] else 40; t, s, val_scout = 60, 110, float(atleta.get('DS', 0))
+            elif "Assistências" in fundamento: t, l, s, val_scout = 30, 72, 110, float(atleta.get('A', 0))
+            else: l = 80 if atleta['pos_nome'] == 'Atacante' else 50; t, s, val_scout = 50, 100, float(atleta['media_num'] / 2)
+
+            tam = int(s * min(1.8, 1.0 + (val_scout * 0.1)))
+            
+            # CAMPINHO COM MARCAÇÕES BRANCAS
+            heatmap_html = f"""
+            <div style="position: relative; width: 100%; height: 210px; background: #2e7d32; border: 3px solid #fff; border-radius: 10px; overflow: hidden; margin-bottom: 12px;">
+                <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.4);"></div>
+                <div style="position: absolute; left: 50%; top: 50%; width: 55px; height: 55px; border: 2px solid rgba(255,255,255,0.4); border-radius: 50%; transform: translate(-50%, -50%);"></div>
+                <div style="position: absolute; left: 0; top: 20%; width: 35px; height: 60%; border: 2px solid rgba(255,255,255,0.4);"></div>
+                <div style="position: absolute; right: 0; top: 20%; width: 35px; height: 60%; border: 2px solid rgba(255,255,255,0.4);"></div>
+                <div style="position: absolute; top: {t}%; left: {l}%; width: {tam}px; height: {tam}px; background: radial-gradient(circle, rgba(255,0,0,0.8) 0%, transparent 70%); filter: blur(15px); transform: translate(-50%, -50%); transition: all 0.6s;"></div>
+            </div>"""
+            st.markdown(heatmap_html, unsafe_allow_html=True)
+
+            # --- CARD DE PONTUAÇÃO SIMPLIFICADO ---
+            st.markdown(f"""
+            <div style="background: #FFFBE6; border: 2px solid #000; border-radius: 8px; padding: 15px; box-shadow: 4px 4px 0px #000;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                    <b style="color:#000;">PONTOS ÚLTIMA RODADA:</b>
+                    <b style="background:#FF6600; color:#000; padding: 2px 10px; border-radius:10px; font-size:18px;">{atleta['pontos_num']:.2f}</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <b style="color:#000;">MÉDIA GERAL:</b>
+                    <b style="background:#444; color:#fff; padding: 2px 10px; border-radius:10px;">{atleta['media_num']:.2f}</b>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+            # --- SCOUTS TÉCNICOS ---
+            sc_list = ['G', 'A', 'DS', 'FD', 'FS', 'FF', 'I', 'PP', 'DP', 'GS']
+            sc_html = "".join([f'<div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; padding:4px 0;"><b>{s}</b> <span style="color:#FF6600;">{int(atleta.get(s,0))}</span></div>' for s in sc_list])
+            st.markdown(f'<div style="background:#000; color:#fff; padding:12px; border-radius:10px; margin-top:10px; font-size:12px; border-left: 5px solid #FF6600;"><div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">{sc_html}</div></div>', unsafe_allow_html=True)
+
+
+# --- 📋 QUADRO TÁTICO (V82.0 - SOMA APENAS TITULARES + DESIGN SHADOW) ---
 elif menu == "📋 Quadro Tático":
     st.markdown("<h1 class='orange-title'>🏟️ Quadro Tático Oficial & Reservas</h1>", unsafe_allow_html=True)
     
+    # 1. Seleção de Formação
     formacao = st.selectbox("Selecione a Formação:", ["4-4-2", "4-3-3", "3-5-2", "3-4-3", "5-3-2", "5-4-1"])
     
     if st.button("🔄 ATUALIZAR DADOS LIVE"):
@@ -273,24 +402,40 @@ elif menu == "📋 Quadro Tático":
         if not players: 
             return [{"apelido": "Vazio", "foto": "none", "preco_num": 0, "pontos_live": 0, "scouts_live": {}}] * count
         
-        # Mantém a consistência dos jogadores selecionados
         random.seed(st.session_state.seed_campo)
         sampled = random.sample(players, min(len(players), count))
         while len(sampled) < count:
             sampled.append({"apelido": "Vazio", "foto": "none", "preco_num": 0, "pontos_live": 0, "scouts_live": {}})
         return sampled
 
+    # Captura dos Titulares (Final Team)
     gol_t = get_titulares("Goleiro", 1)
     lats_t = get_titulares("Lateral", config["Lateral"])
     zags_t = get_titulares("Zagueiro", config["Zagueiro"])
     meis_t = get_titulares("Meia", config["Meia"])
     atas_t = get_titulares("Atacante", config["Atacante"])
+    final_team = {"Goleiro": gol_t, "Lateral": lats_t, "Zagueiro": zags_t, "Meia": meis_t, "Atacante": atas_t}
 
+    # --- CÁLCULO DE PATRIMÓNIO (APENAS JOGADORES NO CAMPO) ---
+    valor_titulares = 0
+    for pos_list in final_team.values():
+        for p in pos_list:
+            if p['apelido'] != "Vazio":
+                valor_titulares += p.get('preco_num', 0)
+
+    # Card de Valor com o Design Shadow que gostaste
+    st.markdown(f"""
+        <div style="background: white; border: 3px solid #000; padding: 12px 25px; border-radius: 10px; box-shadow: 6px 6px 0px #FF6600; display: inline-block; margin-bottom: 20px;">
+            <span style="color: #000; font-weight: 900; font-size: 14px; text-transform: uppercase;">💰 Custo dos 11 Titulares:</span>
+            <span style="color: #FF6600; font-weight: 900; font-size: 22px; margin-left: 10px;">C$ {valor_titulares:.2f}</span>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # --- BANCO DE RESERVAS ---
     st.markdown("### 📋 Banco de Reservas")
     c1, c2 = st.columns([1, 2])
-    
     with c1:
-        lux_pos = st.selectbox("Posição Escolhida para Reserva de Luxo:", [None, "Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante"], index=0)
+        lux_pos = st.selectbox("Posição Reserva de Luxo:", [None, "Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante"], index=0)
         st.session_state.posicao_luxo = lux_pos
         modo_banco = st.radio("Modo:", ["Automático", "Manual"])
 
@@ -302,44 +447,29 @@ elif menu == "📋 Quadro Tático":
         pos_df = df_active[df_active['pos_nome'] == pos_name]
         return pos_df[pos_df['preco_num'] < corte].sort_values('media_num', ascending=False)
 
-    log_substituicao = []
-    final_team = {"Goleiro": gol_t, "Lateral": lats_t, "Zagueiro": zags_t, "Meia": meis_t, "Atacante": atas_t}
-
     bench_cols = st.columns(5)
     pos_abrev = {"Goleiro": "GOL", "Lateral": "LAT", "Zagueiro": "ZAG", "Meia": "MEI", "Atacante": "ATA"}
 
     for i, p_name in enumerate(["Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante"]):
         if config.get(p_name, 1) == 0 and p_name != "Goleiro": continue
-        
         tit_da_pos = final_team[p_name]
         validos = filter_reserves(p_name, tit_da_pos)
-        
         with bench_cols[i]:
             res_chosen = None
             if modo_banco == "Manual" or lux_pos == p_name:
                 if not validos.empty:
-                    res_name = st.selectbox(f"Reserva {pos_abrev[p_name]}:", ["--"] + validos['apelido'].tolist(), key=f"res_v2_{p_name}")
+                    res_name = st.selectbox(f"{pos_abrev[p_name]}:", ["--"] + validos['apelido'].tolist(), key=f"res_v2_{p_name}")
                     if res_name != "--":
                         res_chosen = validos[validos['apelido'] == res_name].iloc[0].to_dict()
             elif modo_banco == "Automático" and not validos.empty:
                 res_chosen = validos.iloc[0].to_dict()
 
             if res_chosen:
-                st.markdown(f'''
-                    <div class="bench-card-v2">
-                        <img src="{res_chosen.get("time_escudo", "")}" style="width:25px;">
-                        <div style="font-size:10px; color:#FF6600; font-weight:bold; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">{res_chosen["apelido"]}</div>
-                        <div class="bench-pos-v2">{pos_abrev[p_name]}</div>
-                    </div>
-                ''', unsafe_allow_html=True)
+                st.markdown(f'''<div class="bench-card-v2"><img src="{res_chosen.get("time_escudo", "")}" style="width:25px;"><div style="font-size:10px; color:#FF6600; font-weight:bold;">{res_chosen["apelido"]}</div><div class="bench-pos-v2">{pos_abrev[p_name]}</div></div>''', unsafe_allow_html=True)
             else:
-                st.markdown(f'''
-                    <div class="bench-card-v2">
-                        <div class="bench-plus-v2">+</div>
-                        <div class="bench-pos-v2">{pos_abrev[p_name]}</div>
-                    </div>
-                ''', unsafe_allow_html=True)
+                st.markdown(f'''<div class="bench-card-v2"><div class="bench-plus-v2">+</div><div class="bench-pos-v2">{pos_abrev[p_name]}</div></div>''', unsafe_allow_html=True)
 
+    # --- DESENHO DO CAMPO (CAMPINHO) ---
     def draw_player(p, top, left):
         foto = p["foto"].replace("FORMATO","140x140") if p.get("foto") and p["foto"] != "none" else ""
         if foto:
@@ -351,37 +481,111 @@ elif menu == "📋 Quadro Tático":
             </div>'''
         return f'<div class="player-spot" style="top:{top}%; left:{left}%;"><div class="player-photo-field" style="opacity:0.2; background:#222;"></div><span class="player-name-tag" style="color:#666;">VAZIO</span></div>'
 
-    html_field = f"""
-        <div class="center-line"></div>
-        <div class="center-circle"></div>
-        <div class="penalty-area-left"></div>
-        <div class="small-area-left"></div>
-        <div class="arc-left"></div>
-        <div class="penalty-area-right"></div>
-        <div class="small-area-right"></div>
-        <div class="arc-right"></div>
-    """
+    html_field = f'<div class="center-line"></div><div class="center-circle"></div><div class="penalty-area-left"></div><div class="small-area-left"></div><div class="arc-left"></div><div class="penalty-area-right"></div><div class="small-area-right"></div><div class="arc-right"></div>'
     
     html_field += draw_player(final_team["Goleiro"][0], 50, 8)
     z = final_team["Zagueiro"]
     if config["Zagueiro"] == 2: html_field += draw_player(z[0], 40, 25) + draw_player(z[1], 60, 25)
     else: html_field += draw_player(z[0], 30, 22) + draw_player(z[1], 50, 22) + draw_player(z[2], 70, 22)
-    
     if config["Lateral"] == 2:
         l = final_team["Lateral"]
         html_field += draw_player(l[0], 15, 28) + draw_player(l[1], 85, 28)
-    
     m = final_team["Meia"]
     if config["Meia"] == 3: html_field += draw_player(m[0], 30, 50) + draw_player(m[1], 50, 45) + draw_player(m[2], 70, 50)
     elif config["Meia"] == 4: html_field += draw_player(m[0], 25, 48) + draw_player(m[1], 42, 45) + draw_player(m[2], 58, 45) + draw_player(m[3], 75, 48)
     elif config["Meia"] == 5: html_field += draw_player(m[0], 20, 52) + draw_player(m[1], 35, 46) + draw_player(m[2], 50, 42) + draw_player(m[3], 65, 46) + draw_player(m[4], 80, 52)
-    
     a = final_team["Atacante"]
     if config["Atacante"] == 1: html_field += draw_player(a[0], 50, 88)
     elif config["Atacante"] == 2: html_field += draw_player(a[0], 35, 84) + draw_player(a[1], 65, 84)
     elif config["Atacante"] == 3: html_field += draw_player(a[0], 25, 82) + draw_player(a[1], 50, 88) + draw_player(a[2], 75, 82)
 
     st.markdown(f'<div class="field-container">{html_field}</div>', unsafe_allow_html=True)
+
+
+
+# --- 📊 CENTRAL PROBABILIDADES ---
+elif menu == "📊 Central Probabilidades":
+    st.markdown("<h1 class='orange-title'>📊 Central de Probabilidades</h1>", unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("🛡️ Chance de SG")
+        for _, r in df.groupby('time_nome').first().reset_index().nlargest(6, 'prob_sg').iterrows():
+            st.markdown(f"""<div class="prob-card" style="background:#f9f9f9; padding:10px; margin:5px; border-radius:8px; border: 1px solid #ddd;"><div style="display:flex; justify-content:space-between;"><span><img src="{r['time_escudo']}" width="20"> {r['time_nome']}</span><b>{int(r['prob_sg'])}%</b></div><div class="prob-bar-bg"><div class="prob-bar-fill" style="width:{r['prob_sg']}%"></div></div></div>""", unsafe_allow_html=True)
+    with c2:
+        st.subheader("⚽ Chance de Gol")
+        for _, r in df_active[df_active['pos_nome']=='Atacante'].drop_duplicates(subset=['clube_id']).nlargest(6, 'media_num').iterrows():
+            prob_g = int(min(r['media_num']*10, 92))
+            st.markdown(f"""<div class="prob-card" style="background:#f9f9f9; padding:10px; margin:5px; border-radius:8px; border: 1px solid #ddd;"><div style="display:flex; justify-content:space-between;"><span><img src="{r['time_escudo']}" width="20"> {r['apelido']}</span><b>{prob_g}%</b></div><div class="prob-bar-bg"><div class="prob-bar-fill" style="width:{prob_g}%;"></div></div></div>""", unsafe_allow_html=True)
+
+# --- 🧠 RADAR DE CAPITÃO (V82.0 - ALGORITMO DE ELITE & DESIGN SHADOW) ---
+elif menu == "🧠 Radar de Capitão":
+    st.markdown("<h1 class='orange-title'>🧠 Radar de Capitão Elite</h1>", unsafe_allow_html=True)
+
+    # --- LÓGICA DO ALGORITMO AVANÇADO ---
+    def calcular_potencial_capitao(row):
+        # Base: Média + Última Pontuação
+        score = (row['media_num'] * 0.6) + (row['pontos_num'] * 0.4)
+        
+        # Bônus por Posição (Preferência Atacante)
+        if row['pos_nome'] == 'Atacante': score *= 1.2 
+        elif row['pos_nome'] == 'Meia': score *= 1.0
+        
+        # Bônus por Scouts Decisivos (Gols e Assistências)
+        gols = row.get('G', 0)
+        assists = row.get('A', 0)
+        score += (gols * 2) + (assists * 1.5)
+        
+        return score
+
+    # Criar DataFrame de Candidatos (Meias e Atacantes)
+    df_caps = df_active[df_active['pos_nome'].isin(['Meia', 'Atacante'])].copy()
+    df_caps['score_elite'] = df_caps.apply(calcular_potencial_capitao, axis=1)
+
+    # Separar Mandantes e Visitantes
+    # Aqui filtramos usando a lista de partidas para saber quem joga em casa
+    mandantes_ids = [j['clube_casa_id'] for j in partidas]
+    
+    df_mandantes = df_caps[df_caps['clube_id'].isin(mandantes_ids)].sort_values('score_elite', ascending=False).head(4)
+    df_visitantes = df_caps[~df_caps['clube_id'].isin(mandantes_ids)].sort_values('score_elite', ascending=False).head(2)
+
+    # Unir para exibição (4 em casa, 2 fora)
+    caps_finais = pd.concat([df_mandantes, df_visitantes])
+
+    # --- INTERFACE VISUAL (ESTILO ANÁLISE DE CONFRONTOS) ---
+    cols = st.columns(3)
+    for i, (_, row) in enumerate(caps_finais.iterrows()):
+        # Identificar se é Mandante ou Visitante para o selo
+        tipo_mando = "MANDANTE" if row['clube_id'] in mandantes_ids else "VISITANTE"
+        cor_mando = "#FF6600" if tipo_mando == "MANDANTE" else "#555"
+        
+        card_html = f"""
+        <div style="background-color: white; border: 4px solid #000; border-radius: 15px; padding: 15px; font-family: 'Arial Black', sans-serif; box-shadow: 8px 8px 0px #FF6600; margin-bottom: 25px; text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="background: #000; color: #FF6600; padding: 2px 10px; border-radius: 5px; font-size: 10px; font-weight: 900;">{tipo_mando}</div>
+                <div style="background: #FF6600; color: #000; width: 25px; height: 25px; border-radius: 50%; font-weight: 900; line-height: 25px; border: 2px solid #000;">C</div>
+            </div>
+            
+            <img src="{row['time_escudo']}" width="35" style="margin-top: 10px;">
+            <br>
+            <img src="{row['foto'].replace("FORMATO","140x140")}" width="110" style="border-radius: 50%; border: 3px solid #000; margin: 10px 0; background: #f0f0f0;">
+            
+            <div style="font-size: 18px; color: #000; font-weight: 900; text-transform: uppercase; min-height: 50px;">{row['apelido']}</div>
+            
+            <div style="background: #000; color: #fff; padding: 5px; border-radius: 8px; margin-top: 10px;">
+                <div style="font-size: 9px; color: #FF6600;">PROBABILIDADE DE MITADA</div>
+                <div style="font-size: 20px; font-weight: 900;">{min(99.9, row['score_elite'] * 5):.1f}%</div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-around; margin-top: 10px; font-size: 12px; font-weight: bold; color: #000;">
+                <div>MÉDIA<br>{row['media_num']:.2f}</div>
+                <div style="border-left: 1px solid #ddd;"></div>
+                <div>PREÇO<br>C$ {row['preco_num']}</div>
+            </div>
+        </div>
+        """
+        with cols[i % 3]:
+            components.html(card_html, height=450)
+
 # --- 🔥 TERMÔMETRO INTELIGENTE INTEGRADO (V56.1) ---
 elif menu == "🔥 Termômetro":
     st.markdown("<h1 class='orange-title'>🔥 Termômetro de Momento Inteligente</h1>", unsafe_allow_html=True)
@@ -661,12 +865,56 @@ elif menu == "🏟️ Análise de Confrontos":
         </div>
         """
         components.html(card_html, height=900)
-# --- 📈 HISTÓRICO ---
+
+
+
+
+# --- 📈 HISTÓRICO (DESIGN SHADOW ARENA) ---
 elif menu == "📈 Histórico":
-    st.markdown("<h1 class='orange-title'>📈 Histórico de Gravações Arena</h1>", unsafe_allow_html=True)
-    rodada_view = st.selectbox("Ver Histórico da Rodada:", range(1, 39), index=rodada_atual-1)
-    historico = st.session_state.historico_arena[rodada_view]
-    for posicao, jogadores in historico.items():
-        if jogadores:
-            st.subheader(f"🛡️ {posicao}")
-            st.table(pd.DataFrame(jogadores)[['apelido', 'media_num', 'preco_num', 'pontos_num']])
+    st.markdown("<h1 class='orange-title'>📈 Histórico das Minhas Dicas</h1>", unsafe_allow_html=True)
+    
+    # Seletor de Rodada com estilo
+    rodada_view = st.selectbox("Escolher Rodada para consulta:", range(1, 39), index=rodada_atual-1)
+    
+    st.markdown(f"### 🏟️ Registros da Rodada {rodada_view}")
+    
+    historico = st.session_state.historico_arena.get(rodada_view, {})
+    
+    if not any(historico.values()):
+        st.info(f"Nenhum registro encontrado para a Rodada {rodada_view}.")
+    else:
+        for posicao, jogadores in historico.items():
+            if jogadores:
+                # Subtítulo com detalhe laranja
+                st.markdown(f"""
+                    <div style="border-left: 5px solid #FF6600; padding-left: 10px; margin: 20px 0 10px 0;">
+                        <h3 style="color: white; margin: 0;">🛡️ {posicao.upper()}</h3>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Criar colunas para os cards dos jogadores
+                cols = st.columns(3)
+                for idx, j in enumerate(jogadores):
+                    with cols[idx % 3]:
+                        st.markdown(f"""
+                        <div style="background: white; border: 3px solid #000; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 6px 6px 0px #FF6600;">
+                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                                <img src="{j.get('foto', '').replace('FORMATO', '140x140')}" width="50" style="border-radius: 50%; border: 2px solid #000;">
+                                <div>
+                                    <div style="font-weight: 900; color: #000; text-transform: uppercase; font-size: 14px;">{j['apelido']}</div>
+                                    <div style="background: #FF6600; color: #000; font-size: 10px; padding: 1px 5px; border-radius: 4px; display: inline-block; font-weight: bold;">{posicao.upper()}</div>
+                                </div>
+                            </div>
+                            <div style="background: #f0f0f0; border: 1px solid #000; border-radius: 5px; padding: 5px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333;">
+                                    <span>Média:</span> <b>{j['media_num']:.2f}</b>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333;">
+                                    <span>Preço:</span> <b>C$ {j['preco_num']:.2f}</b>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #000; margin-top: 2px; border-top: 1px solid #ccc;">
+                                    <span>PONTOS:</span> <b style="color: #FF6600;">{j.get('pontos_num', 0.0):.2f}</b>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
