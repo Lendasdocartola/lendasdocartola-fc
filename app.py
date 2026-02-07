@@ -657,11 +657,13 @@ elif menu == "🧠 Radar de Capitão":
         with cols[i % 3]:
             components.html(card_html, height=450)
 
-# --- 🔥 TERMÔMETRO INTELIGENTE INTEGRADO (V56.1) ---
+
+# --- 🔥 TERMÔMETRO INTELIGENTE INTEGRADO (V56.6 - ZERO INDENT FIX) ---
 elif menu == "🔥 Termômetro":
     st.markdown("<h1 class='orange-title'>🔥 Termômetro de Momento Inteligente</h1>", unsafe_allow_html=True)
     
-    df_quentes = df_active[df_active['tendencia'] > 0].sort_values('tendencia', ascending=False).drop_duplicates(subset=['atleta_id']).head(8)
+    # LÓGICA DE DADOS
+    df_quentes = df_active[df_active['tendencia'] > 0].sort_values(['tendencia', 'media_num'], ascending=False).drop_duplicates(subset=['atleta_id']).head(8)
     fonte_dados = "🚀 Momento Live"
 
     if df_quentes.empty:
@@ -673,61 +675,52 @@ elif menu == "🔥 Termômetro":
     st.caption(f"Fonte de análise atual: **{fonte_dados}**")
     
     c1, c2 = st.columns(2)
+    
     with c1:
-        st.subheader("🔥 Em Ascensão")
+        st.markdown("### 🔥 Em Ascensão")
         for _, r in df_quentes.iterrows():
             val_ref = r['tendencia'] if r['tendencia'] > 0 else r['media_num']
-            perc_progresso = min(int((val_ref / 10) * 100), 100)
-            pulse_class = "card-pulse" if val_ref >= 8.0 else ""
-            
+            perc_prog = min(int((val_ref / 12) * 100), 100)
             ponto_corte = r['preco_num'] * 0.33
-            selo_ouro = ""
-            if r['pontos_num'] >= ponto_corte and val_ref >= 7.0:
-                selo_ouro = '<div style="background:#28a745; color:white; font-size:9px; font-weight:bold; padding:2px 6px; border-radius:10px; width:fit-content; margin-bottom:5px;">💰 OPORTUNIDADE DE OURO</div>'
+            selo = f'<div style="background:#28a745;color:white;font-size:9px;font-weight:bold;padding:2px 6px;border-radius:10px;width:fit-content;margin-bottom:5px;">💰 OPORTUNIDADE DE OURO</div>' if (r['pontos_num'] >= ponto_corte and val_ref >= 7.0) else ""
             
-            st.markdown(f"""
-                <div class="val-card-v2 {pulse_class}" style="border-left-color: #ff4b4b; background: #FFF8F8;">
-                    {selo_ouro}
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><img src="{r['time_escudo']}" width="20"> <b>{r['apelido']}</b></span>
-                        <span style="color:#ff4b4b; font-weight:800;">{val_ref:.1f}</span>
-                    </div>
-                    <div class="prob-bar-bg" style="margin-bottom: 8px;">
-                        <div class="prob-bar-fill" style="width:{perc_progresso}%; background:#ff4b4b;"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#555;">
-                        <span>Média Bas. (Casa): <b>{r['media_basica']:.1f}</b></span>
-                        <span>Posição: <b>{r['pos_nome']}</b></span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+            # HTML sem espaços no início das linhas para evitar erro de renderização
+            card_h = f"""<div style="background:white;border:1px solid #ddd;border-left:5px solid #ff4b4b;padding:15px;border-radius:10px;margin-bottom:15px;font-family:sans-serif;">
+{selo}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+<span style="display:flex;align-items:center;gap:8px;"><img src="{r['time_escudo']}" width="25"> <b style="color:black;">{r['apelido']}</b></span>
+<span style="color:#ff4b4b;font-weight:800;font-size:18px;">{val_ref:.1f}</span>
+</div>
+<div style="background:#eee;border-radius:10px;height:8px;width:100%;margin-bottom:8px;">
+<div style="background:#ff4b4b;width:{perc_prog}%;height:8px;border-radius:10px;"></div>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:11px;color:#666;">
+<span>Média Bas. (Casa): <b>{r['media_basica']:.1f}</b></span>
+<span>Posição: <b>{r['pos_nome']}</b></span>
+</div>
+</div>"""
+            st.markdown(card_h, unsafe_allow_html=True)
             
     with c2:
-        st.subheader("❄️ Em Queda")
+        st.markdown("### ❄️ Em Queda")
         for _, r in df_frios.iterrows():
-            perc_progresso_frio = min(int((r['media_num'] / 10) * 100), 100)
-            st.markdown(f"""
-                <div class="val-card-v2" style="border-left-color: #1f77b4; background: #F8FBFF;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span><img src="{r['time_escudo']}" width="20"> <b>{r['apelido']}</b></span>
-                        <span style="color:#1f77b4; font-weight:800;">{r['media_num']:.1f}</span>
-                    </div>
-                    <div class="prob-bar-bg" style="margin-bottom: 8px;">
-                        <div class="prob-bar-fill" style="width:{perc_progresso_frio}%; background:#1f77b4;"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#555;">
-                        <span>Média Bas. (Casa): <b>{r['media_basica']:.1f}</b></span>
-                        <span>Posição: <b>{r['pos_nome']}</b></span>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-    if not df_quentes.empty:
-        top_elite = df_quentes.iloc[0]
-        val_top = top_elite['tendencia'] if top_elite['tendencia'] > 0 else top_elite['media_num']
-        if val_top >= 8.0:
-            st.toast(f"MONSTRO DETECTADO: {top_elite['apelido']} atingiu nível Elite ({val_top:.1f})!", icon="🔥")
-
+            val_frio = r['tendencia']
+            perc_frio = min(int((abs(val_frio) / 5) * 100), 100) if val_frio < 0 else 10
+            
+            card_f = f"""<div style="background:white;border:1px solid #ddd;border-left:5px solid #1f77b4;padding:15px;border-radius:10px;margin-bottom:15px;font-family:sans-serif;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+<span style="display:flex;align-items:center;gap:8px;"><img src="{r['time_escudo']}" width="25"> <b style="color:black;">{r['apelido']}</b></span>
+<span style="color:#1f77b4;font-weight:800;font-size:18px;">{val_frio:.1f}</span>
+</div>
+<div style="background:#eee;border-radius:10px;height:8px;width:100%;margin-bottom:8px;">
+<div style="background:#1f77b4;width:{perc_frio}%;height:8px;border-radius:10px;"></div>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:11px;color:#666;">
+<span>Média Atual: <b>{r['media_num']:.1f}</b></span>
+<span>Posição: <b>{r['pos_nome']}</b></span>
+</div>
+</div>"""
+            st.markdown(card_f, unsafe_allow_html=True)
 
 # --- 💰 SIMULADOR DE VALORIZAÇÃO ---
 elif menu == "💰 Simulador de Valorização":
