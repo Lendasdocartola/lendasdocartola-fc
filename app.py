@@ -809,135 +809,484 @@ elif menu == "💰 Simulador de Valorização":
     st.markdown("---")
 
 
-# --- 🏟️ ANÁLISE DE CONFRONTOS (V72.0 - TOTALIZADORES POR TIME & DESIGN SHADOW) ---
+# --- 🏟️ ANÁLISE DE CONFRONTOS (V130.0 - CEDÊNCIA REAL POR SETOR) ---
 elif menu == "🏟️ Análise de Confrontos":
     st.markdown("<h1 class='orange-title' style='font-size: 32px;'>🏟️ Matriz de Confrontos & Cedentes</h1>", unsafe_allow_html=True)
-    
+
+    # ============================================================
+    # FUNÇÕES SEGURAS
+    # ============================================================
+    def safe_sum(dataframe, col):
+        if col in dataframe.columns and not dataframe.empty:
+            return float(dataframe[col].fillna(0).sum())
+        return 0.0
+
+    def safe_mean(dataframe, col):
+        if col in dataframe.columns and not dataframe.empty:
+            val = dataframe[col].fillna(0).mean()
+            return float(val) if not pd.isna(val) else 0.0
+        return 0.0
+
+    def safe_count_above(dataframe, col, threshold=0):
+        if col in dataframe.columns and not dataframe.empty:
+            return int((dataframe[col].fillna(0) > threshold).sum())
+        return 0
+
+    # ============================================================
+    # CONQUISTA: O que MEU TIME produz naquela posição
+    # (Depende apenas dos jogadores do MEU time naquela posição)
+    # ============================================================
+    def calcular_conquista(df_time, posicao, scout_key, scout_nome):
+        df_pos = df_time[df_time['pos_nome'] == posicao]
+        if df_pos.empty:
+            return 0.0
+
+        if scout_nome == "Saldo de Gols (SG)":
+            if posicao in ['Goleiro', 'Zagueiro', 'Lateral']:
+                sg = safe_sum(df_pos, 'SG')
+                dd = safe_sum(df_pos, 'DD') if posicao == 'Goleiro' else 0
+                ds = safe_sum(df_pos, 'DS') if posicao != 'Goleiro' else 0
+                return sg * 4 + dd * 0.5 + ds * 0.3
+            else:
+                return safe_sum(df_pos, 'G') * 3
+
+        elif scout_nome == "Defesa":
+            if posicao == 'Goleiro':
+                return safe_sum(df_pos, 'DD') * 2 + safe_sum(df_pos, 'DP') * 3 + safe_sum(df_pos, 'SG') * 5
+            elif posicao in ['Zagueiro', 'Lateral']:
+                return safe_sum(df_pos, 'DS') * 2.5 + safe_sum(df_pos, 'SG') * 3
+            else:
+                return safe_sum(df_pos, 'DS') * 0.5
+
+        elif scout_key == 'G':
+            gols = safe_sum(df_pos, 'G')
+            fd = safe_sum(df_pos, 'FD')
+            ft = safe_sum(df_pos, 'FT')
+            return gols * 4 + fd * 0.8 + ft * 0.3
+
+        elif scout_key == 'A':
+            assists = safe_sum(df_pos, 'A')
+            return assists * 4 + safe_mean(df_pos, 'media_num') * 0.5
+
+        elif scout_key == 'DS':
+            return safe_sum(df_pos, 'DS') * 2.5
+
+        else:
+            return safe_mean(df_pos, 'pontos_num') * 2
+
+    # ============================================================
+    # CEDÊNCIA: O que o ADVERSÁRIO permite para aquela posição
+    #
+    # *** AQUI ESTÁ A CORREÇÃO PRINCIPAL ***
+    #
+    # Cada posição do meu time se beneficia de SETORES DIFERENTES
+    # do adversário. Então filtramos o DF do adversário por setor
+    # específico que é responsável pela fragilidade.
+    # ============================================================
+    def calcular_cedencia(df_adversario, posicao_beneficiada, scout_key, scout_nome):
+        if df_adversario.empty:
+            return 0.0
+
+        # Separar o adversário por setores (cada um cede coisas diferentes)
+        adv_gol = df_adversario[df_adversario['pos_nome'] == 'Goleiro']
+        adv_zag = df_adversario[df_adversario['pos_nome'] == 'Zagueiro']
+        adv_lat = df_adversario[df_adversario['pos_nome'] == 'Lateral']
+        adv_mei = df_adversario[df_adversario['pos_nome'] == 'Meia']
+        adv_ata = df_adversario[df_adversario['pos_nome'] == 'Atacante']
+        adv_def = df_adversario[df_adversario['pos_nome'].isin(['Goleiro', 'Zagueiro', 'Lateral'])]
+        adv_ofe = df_adversario[df_adversario['pos_nome'].isin(['Atacante', 'Meia'])]
+
+        # -------------------------------------------------------
+        # GOLS (G): Quem do adversário CEDE gols?
+        # -------------------------------------------------------
+        if scout_key == 'G':
+            if posicao_beneficiada == 'Atacante':
+                # Atacante faz gol contra: Goleiro (GS) + Zagueiros fracos (poucos DS)
+                gs = safe_mean(adv_gol, 'GS')
+                ds_zag = safe_mean(adv_zag, 'DS')
+                fc_def = safe_sum(adv_def, 'FC')
+                # Mais GS + Menos DS dos zagueiros + Mais faltas = mais cedência
+                return gs * 5 + max(0, (4 - ds_zag)) * 2 + fc_def * 0.2
+
+            elif posicao_beneficiada == 'Meia':
+                # Meia faz gol contra: Meio-campo adversário (perdem bola, PI alto)
+                gs = safe_mean(adv_gol, 'GS')
+                ds_mei = safe_mean(adv_mei, 'DS')
+                pi_mei = safe_sum(adv_mei, 'PI') if 'PI' in adv_mei.columns else 0
+                return gs * 3 + max(0, (3 - ds_mei)) * 2.5 + pi_mei * 0.3
+
+            elif posicao_beneficiada == 'Zagueiro':
+                # Zagueiro faz gol de bola parada: Adversário comete muitas faltas (FC)
+                fc_adv = safe_sum(df_adversario, 'FC')
+                gs = safe_mean(adv_gol, 'GS')
+                return fc_adv * 0.5 + gs * 2
+
+            elif posicao_beneficiada == 'Lateral':
+                # Lateral faz gol: Laterais adversários não marcam (poucos DS)
+                ds_lat_adv = safe_mean(adv_lat, 'DS')
+                gs = safe_mean(adv_gol, 'GS')
+                return gs * 2.5 + max(0, (3 - ds_lat_adv)) * 2
+
+            else:  # Goleiro (raro mas existe)
+                return safe_mean(adv_gol, 'GS') * 0.5
+
+        # -------------------------------------------------------
+        # ASSISTÊNCIAS (A): Quem do adversário CEDE assistências?
+        # -------------------------------------------------------
+        elif scout_key == 'A':
+            if posicao_beneficiada == 'Meia':
+                # Meia assiste contra: Defesa adversária fraca (zagueiros com poucos DS)
+                ds_zag = safe_mean(adv_zag, 'DS')
+                ds_lat = safe_mean(adv_lat, 'DS')
+                gs = safe_mean(adv_gol, 'GS')
+                return gs * 3.5 + max(0, (4 - ds_zag)) * 2 + max(0, (3 - ds_lat)) * 1
+
+            elif posicao_beneficiada == 'Atacante':
+                # Atacante assiste contra: Laterais adversários fora de posição
+                ds_lat = safe_mean(adv_lat, 'DS')
+                gs = safe_mean(adv_gol, 'GS')
+                return gs * 2.5 + max(0, (3 - ds_lat)) * 2.5
+
+            elif posicao_beneficiada == 'Lateral':
+                # Lateral cruza/assiste contra: Zagueiros adversários lentos
+                ds_zag = safe_mean(adv_zag, 'DS')
+                gs = safe_mean(adv_gol, 'GS')
+                return gs * 3 + max(0, (4 - ds_zag)) * 2.5
+
+            elif posicao_beneficiada == 'Zagueiro':
+                # Zagueiro assiste em bola parada
+                fc_adv = safe_sum(df_adversario, 'FC')
+                return fc_adv * 0.4 + safe_mean(adv_gol, 'GS') * 1.5
+
+            else:
+                return safe_mean(adv_gol, 'GS') * 0.5
+
+        # -------------------------------------------------------
+        # DESARMES (DS): Quem do adversário CEDE desarmes?
+        # -------------------------------------------------------
+        elif scout_key == 'DS':
+            if posicao_beneficiada == 'Zagueiro':
+                # Zagueiro desarma: Atacantes adversários (tentam driblar, finalizar)
+                fd_ata = safe_sum(adv_ata, 'FD') + safe_sum(adv_ata, 'FT')
+                ff_ata = safe_sum(adv_ata, 'FF')
+                pi_ata = safe_sum(adv_ata, 'PI') if 'PI' in adv_ata.columns else 0
+                return fd_ata * 0.8 + ff_ata * 0.5 + pi_ata * 0.6
+
+            elif posicao_beneficiada == 'Lateral':
+                # Lateral desarma: Meias e pontas adversários
+                fd_mei = safe_sum(adv_mei, 'FD') + safe_sum(adv_mei, 'FT')
+                pi_mei = safe_sum(adv_mei, 'PI') if 'PI' in adv_mei.columns else 0
+                fd_ata = safe_sum(adv_ata, 'FD') * 0.3
+                return fd_mei * 0.7 + pi_mei * 0.5 + fd_ata
+
+            elif posicao_beneficiada == 'Meia':
+                # Meia desarma: Meias adversários (disputa no meio)
+                pi_mei = safe_sum(adv_mei, 'PI') if 'PI' in adv_mei.columns else 0
+                fc_mei = safe_sum(adv_mei, 'FC')
+                fd_mei = safe_sum(adv_mei, 'FD')
+                return pi_mei * 0.8 + fc_mei * 0.4 + fd_mei * 0.3
+
+            elif posicao_beneficiada == 'Goleiro':
+                # Goleiro raramente desarma
+                return safe_sum(adv_ofe, 'FD') * 0.1
+
+            else:  # Atacante
+                # Atacante desarma na frente: pressão alta contra zagueiros
+                pi_zag = safe_sum(adv_zag, 'PI') if 'PI' in adv_zag.columns else 0
+                pi_gol = safe_sum(adv_gol, 'PI') if 'PI' in adv_gol.columns else 0
+                return pi_zag * 0.6 + pi_gol * 0.3
+
+        # -------------------------------------------------------
+        # SALDO DE GOLS (SG): Quem do adversário CEDE SG?
+        # -------------------------------------------------------
+        elif scout_nome == "Saldo de Gols (SG)":
+            if posicao_beneficiada in ['Goleiro', 'Zagueiro', 'Lateral']:
+                # Defensores ganham SG quando adversário NÃO ataca
+                # Atacantes adversários fracos = cedem SG
+                g_ata = safe_sum(adv_ata, 'G')
+                g_mei = safe_sum(adv_mei, 'G')
+                fd_total = safe_sum(adv_ofe, 'FD') + safe_sum(adv_ofe, 'FT')
+
+                # INVERSÃO: quanto MENOS o ataque adversário produz, MAIS cede SG
+                ataque_poder = g_ata * 5 + g_mei * 3 + fd_total * 0.3
+                cedencia_sg = max(0, 25 - ataque_poder)
+
+                # Diferenciação por posição defensiva
+                if posicao_beneficiada == 'Goleiro':
+                    return cedencia_sg * 1.3  # Goleiro é mais impactado
+                elif posicao_beneficiada == 'Zagueiro':
+                    return cedencia_sg * 1.1
+                else:  # Lateral
+                    return cedencia_sg * 0.9
+            else:
+                # Ofensivos não ganham SG diretamente
+                return 0.0
+
+        # -------------------------------------------------------
+        # DEFESA: Quem do adversário CEDE scouts defensivos?
+        # -------------------------------------------------------
+        elif scout_nome == "Defesa":
+            if posicao_beneficiada == 'Goleiro':
+                # Goleiro defende contra: Atacantes que finalizam MUITO
+                fd_ata = safe_sum(adv_ata, 'FD') + safe_sum(adv_ata, 'FT')
+                fd_mei = safe_sum(adv_mei, 'FD') + safe_sum(adv_mei, 'FT')
+                return fd_ata * 1.2 + fd_mei * 0.5
+
+            elif posicao_beneficiada == 'Zagueiro':
+                # Zagueiro defende contra: Atacantes que tentam driblar
+                fd_ata = safe_sum(adv_ata, 'FD')
+                ff_ata = safe_sum(adv_ata, 'FF')
+                return fd_ata * 0.8 + ff_ata * 0.6
+
+            elif posicao_beneficiada == 'Lateral':
+                # Lateral defende contra: Meias/pontas que atacam pelo lado
+                fd_mei = safe_sum(adv_mei, 'FD')
+                pi_ofe = safe_sum(adv_ofe, 'PI') if 'PI' in adv_ofe.columns else 0
+                return fd_mei * 0.7 + pi_ofe * 0.4
+
+            else:
+                return safe_sum(adv_ofe, 'PI') * 0.2 if 'PI' in adv_ofe.columns else 0.0
+
+        # -------------------------------------------------------
+        # PONTOS GERAIS: Cedência genérica diferenciada
+        # -------------------------------------------------------
+        else:
+            if posicao_beneficiada == 'Atacante':
+                gs = safe_mean(adv_gol, 'GS')
+                ds_def = safe_mean(adv_def, 'DS')
+                return gs * 4 + max(0, (4 - ds_def)) * 2
+
+            elif posicao_beneficiada == 'Meia':
+                pi_mei = safe_sum(adv_mei, 'PI') if 'PI' in adv_mei.columns else 0
+                gs = safe_mean(adv_gol, 'GS')
+                ds_mei = safe_mean(adv_mei, 'DS')
+                return gs * 2 + pi_mei * 0.5 + max(0, (3 - ds_mei)) * 1.5
+
+            elif posicao_beneficiada == 'Goleiro':
+                fd_ofe = safe_sum(adv_ofe, 'FD') + safe_sum(adv_ofe, 'FT')
+                g_ofe = safe_sum(adv_ofe, 'G')
+                # Inversão parcial: goleiro pontua com defesas, mas perde com gols sofridos
+                return fd_ofe * 0.8 + max(0, (15 - g_ofe * 3))
+
+            elif posicao_beneficiada == 'Zagueiro':
+                g_ata = safe_sum(adv_ata, 'G')
+                fd_ata = safe_sum(adv_ata, 'FD')
+                return max(0, (15 - g_ata * 4)) + fd_ata * 0.3
+
+            elif posicao_beneficiada == 'Lateral':
+                ds_lat = safe_mean(adv_lat, 'DS')
+                fd_mei = safe_sum(adv_mei, 'FD')
+                return max(0, (3 - ds_lat)) * 2 + fd_mei * 0.3
+
+            else:
+                return safe_mean(df_adversario, 'pontos_num')
+
+    # ============================================================
+    # ÍNDICE DE OPORTUNIDADE
+    # ============================================================
+    def calcular_indice(conquista, cedencia, is_mandante=False):
+        bonus = 1.12 if is_mandante else 0.95
+        return round(((conquista * 0.55) + (cedencia * 0.45)) * bonus, 2)
+
+    # ============================================================
+    # CONFIANÇA
+    # ============================================================
+    def calcular_confianca(df_t, df_a):
+        n = len(df_t) + len(df_a)
+        scouts_ok = sum(1 for c in ['G','A','DS','FD','GS','SG','FC','DD','PI','FT','FF'] if c in df_t.columns)
+        dados_reais = len(df_t[df_t['pontos_num'] > 0]) + len(df_a[df_a['pontos_num'] > 0])
+        return min(100, int(min(50, n * 1.2) + min(30, scouts_ok * 2.7) + min(20, dados_reais * 1.5)))
+
+    # ============================================================
+    # TOP TARGETS CRUZANDO FORÇA × FRAGILIDADE REAL
+    # ============================================================
+    def get_top_targets(clube_id, df_adversario, scout_key, scout_nome):
+        df_cl = df_active[df_active['clube_id'] == clube_id].copy()
+        if df_cl.empty:
+            return "<p style='color:#888;'>Sem dados</p>"
+
+        if scout_nome in ["Defesa", "Saldo de Gols (SG)"]:
+            df_cl = df_cl[df_cl['pos_nome'].isin(['Goleiro', 'Zagueiro', 'Lateral'])]
+        elif scout_key == 'G':
+            df_cl = df_cl[df_cl['pos_nome'].isin(['Atacante', 'Meia'])]
+        elif scout_key == 'A':
+            df_cl = df_cl[df_cl['pos_nome'].isin(['Meia', 'Atacante', 'Lateral'])]
+
+        if df_cl.empty:
+            return "<p style='color:#888;'>Sem jogadores</p>"
+
+        def score_alvo(row):
+            pos = row['pos_nome']
+            conq = calcular_conquista(
+                df_cl[df_cl['atleta_id'] == row['atleta_id']], pos, scout_key, scout_nome
+            )
+            ced = calcular_cedencia(df_adversario, pos, scout_key, scout_nome)
+            return conq * 0.6 + ced * 0.4
+
+        df_cl['score_alvo'] = df_cl.apply(score_alvo, axis=1)
+        top = df_cl.nlargest(3, 'score_alvo')
+
+        medalhas = ["🥇", "🥈", "🥉"]
+        html = ""
+        for rank, (_, p) in enumerate(top.iterrows()):
+            f_url = str(p['foto']).replace('FORMATO', '140x140')
+            ced_val = calcular_cedencia(df_adversario, p['pos_nome'], scout_key, scout_nome)
+            html += f"""
+            <div style="display:flex; align-items:center; background:#000; color:#fff; 
+                        padding:10px 15px; border-radius:20px; border:2px solid #FF6600; 
+                        margin:6px; width:95%; position:relative;">
+                <div style="position:absolute; top:-8px; left:-5px; font-size:16px;">{medalhas[rank]}</div>
+                <img src="{f_url}" width="40" style="border-radius:50%; border:2px solid #FF6600; margin-right:12px;">
+                <div style="flex:1; font-size:12px; line-height:1.3;">
+                    <b style="font-size:14px;">{p['apelido']}</b><br>
+                    <span style="color:#FF6600; font-weight:bold;">{p['pos_nome']}</span>
+                    <span style="color:#aaa;"> | Rival cede: {ced_val:.1f}</span>
+                </div>
+            </div>"""
+        return html
+
+    # ============================================================
+    # INTERFACE - FILTROS
+    # ============================================================
     c_filt1, c_filt2, c_filt3 = st.columns([1.5, 2, 2])
     with c_filt1:
-        qtd_jogos = st.select_slider("Tendência (Rodadas):", options=[1, 2, 3, 4, 5], value=1)
+        qtd_jogos = st.select_slider("Tendência (Rodadas):", options=[1,2,3,4,5], value=1)
     with c_filt2:
-        scout_foco = st.selectbox("Escolha o Scout para Analisar:", 
-                                 ["Pontos", "Desarmes (DS)", "Gols (G)", "Assistências (A)", "Defesa", "Saldo de Gols (SG)"])
+        scout_foco = st.selectbox("Scout para Analisar:",
+            ["Pontos", "Desarmes (DS)", "Gols (G)", "Assistências (A)", "Defesa", "Saldo de Gols (SG)"])
     with c_filt3:
-        lista_confrontos = ["Todos os Jogos"] + [f"{clubes_raw[str(j['clube_casa_id'])]['nome']} x {clubes_raw[str(j['clube_visitante_id'])]['nome']}" for j in partidas]
+        lista_confrontos = ["Todos os Jogos"] + [
+            f"{clubes_raw[str(j['clube_casa_id'])]['nome']} x {clubes_raw[str(j['clube_visitante_id'])]['nome']}"
+            for j in partidas]
         jogo_selecionado = st.selectbox("Filtrar por Confronto:", lista_confrontos)
 
-    map_scout = {"Pontos": "pontos_num", "Desarmes (DS)": "DS", "Gols (G)": "G", "Assistências (A)": "A", "Defesa": "DE", "Saldo de Gols (SG)": "SG"}
+    map_scout = {"Pontos":"pontos_num", "Desarmes (DS)":"DS", "Gols (G)":"G",
+                 "Assistências (A)":"A", "Defesa":"DE", "Saldo de Gols (SG)":"SG"}
     foco_key = map_scout[scout_foco]
 
+    # ============================================================
+    # CARDS DOS CONFRONTOS
+    # ============================================================
     for jogo in partidas:
         nome_confronto = f"{clubes_raw[str(jogo['clube_casa_id'])]['nome']} x {clubes_raw[str(jogo['clube_visitante_id'])]['nome']}"
         if jogo_selecionado != "Todos os Jogos" and jogo_selecionado != nome_confronto:
             continue
 
-        id_casa = str(jogo['clube_casa_id']); id_fora = str(jogo['clube_visitante_id'])
-        casa = clubes_raw[id_casa]; fora = clubes_raw[id_fora]
+        id_casa = str(jogo['clube_casa_id'])
+        id_fora = str(jogo['clube_visitante_id'])
+        casa = clubes_raw[id_casa]
+        fora = clubes_raw[id_fora]
         df_c = df[df['clube_id'] == jogo['clube_casa_id']]
         df_f = df[df['clube_id'] == jogo['clube_visitante_id']]
 
-        def get_metrics_v72(df_time, df_adv, pos, scout):
-            df_pos = df_time[df_time['pos_nome'] == pos]
-            if scout == "SG":
-                gols_sofridos = df_time[df_time['pos_nome'] == 'Goleiro']['GS'].sum() if not df_time.empty else 1
-                prob = 100 if gols_sofridos == 0 else 20
-                return prob, prob
-            
-            conq = df_pos[scout].mean() if scout in df_pos.columns and not df_pos.empty else 0
-            def safe_mean(dframe, col):
-                return dframe[col].mean() if col in dframe.columns and not dframe.empty else 0
-            
-            if scout == "G": ced = df_adv[df_adv['pos_nome'] == 'Goleiro']['GS'].mean() if not df_adv.empty else 0
-            elif scout == "A": ced = (df_adv[df_adv['pos_nome'] == 'Goleiro']['GS'].mean() if not df_adv.empty else 0) * 0.7
-            elif scout == "DS": ced = (safe_mean(df_adv, 'FC') + safe_mean(df_adv, 'PI')) * 0.5
-            elif scout == "DE": ced = (safe_mean(df_adv, 'FD') + safe_mean(df_adv, 'FT')) * 0.7
-            else: ced = safe_mean(df_adv, 'pontos_num')
-            return conq, ced
-
-        # --- CÁLCULO DOS TOTAIS DO TIME ---
-        total_conq_casa = df_c[foco_key].sum() if foco_key in df_c.columns else 0
-        total_ced_casa = (df_f['FC'].sum() + df_f.get('PI', pd.Series([0])).sum()) * 0.5 if foco_key == "DS" else df_f['pontos_num'].sum() * 0.6
-        
-        total_conq_fora = df_f[foco_key].sum() if foco_key in df_f.columns else 0
-        total_ced_fora = (df_c['FC'].sum() + df_c.get('PI', pd.Series([0])).sum()) * 0.5 if foco_key == "DS" else df_c['pontos_num'].sum() * 0.6
-
-        def get_top_targets_v72(clube_id, scout_key, foco_original):
-            df_clv = df_active[df_active['clube_id'] == clube_id]
-            if foco_original in ["Defesa", "Saldo de Gols (SG)"]:
-                df_clv = df_clv[df_clv['pos_nome'].isin(['Goleiro', 'Zagueiro', 'Lateral'])]
-            sort_col = scout_key if scout_key in df_clv.columns else 'media_num'
-            top = df_clv.sort_values(by=sort_col, ascending=False).head(3)
-            html_res = ""
-            for _, p in top.iterrows():
-                f_url = str(p['foto']).replace('FORMATO', '140x140')
-                html_res += f"""
-                <div style="display: flex; align-items: center; background: #000; color: #fff; padding: 8px 15px; border-radius: 20px; border: 2px solid #FF6600; margin: 6px; width: 95%;">
-                    <img src="{f_url}" width="35" style="border-radius: 50%; border: 1.5px solid #FF6600; margin-right: 12px;">
-                    <div style="font-size: 13px; line-height: 1.2;">
-                        <b style="font-size: 14px;">{p['apelido']}</b><br>
-                        <span style="color: #FF6600; font-weight: bold;">{p['pos_nome']} | {scout_foco}: {p.get(sort_col, 0):.1f}</span>
-                    </div>
-                </div>
-                """
-            return html_res
+        confianca = calcular_confianca(df_c, df_f)
+        cor_conf = "#28a745" if confianca >= 70 else "#FF6600" if confianca >= 40 else "#dc3545"
+        txt_conf = "ALTA" if confianca >= 70 else "MÉDIA" if confianca >= 40 else "BAIXA"
 
         rows_html = ""
-        for s in ["Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante"]:
-            c_conq, f_ced = get_metrics_v72(df_c, df_f, s, foco_key)
-            f_conq, c_ced = get_metrics_v72(df_f, df_c, s, foco_key)
-            suf = "%" if scout_foco == "Saldo de Gols (SG)" else ""
+        total_idx_casa = 0
+        total_idx_fora = 0
+
+        for setor in ["Goleiro", "Lateral", "Zagueiro", "Meia", "Atacante"]:
+            # CASA atacando
+            conq_c = calcular_conquista(df_c, setor, foco_key, scout_foco)
+            ced_f = calcular_cedencia(df_f, setor, foco_key, scout_foco)  # FORA cede para posição X da CASA
+            idx_c = calcular_indice(conq_c, ced_f, True)
+
+            # FORA atacando
+            conq_f = calcular_conquista(df_f, setor, foco_key, scout_foco)
+            ced_c = calcular_cedencia(df_c, setor, foco_key, scout_foco)  # CASA cede para posição X do FORA
+            idx_f = calcular_indice(conq_f, ced_c, False)
+
+            total_idx_casa += idx_c
+            total_idx_fora += idx_f
+
+            def cor_idx(v):
+                if v >= 10: return "#28a745"
+                elif v >= 5: return "#FF6600"
+                return "#dc3545"
+
             rows_html += f"""
-            <div style="display: flex; align-items: center; background: #fdfdfd; border: 1.5px solid #eee; padding: 12px; border-radius: 10px; text-align: center; margin-top: 6px;">
-                <div style="flex: 1.5; font-weight: 900; color: #000; text-align: left; font-size: 15px;">{s.upper()}</div>
-                <div style="flex: 2; font-size: 20px; font-weight: 800;">{c_conq:.1f}{suf}</div>
-                <div style="flex: 2; font-size: 20px; color: #FF6600; font-weight: 800;">{f_ced:.1f}{suf}</div>
-                <div style="flex: 0.2; background: #FF6600; height: 20px; margin: 0 10px;"></div>
-                <div style="flex: 2; font-size: 20px; font-weight: 800;">{f_conq:.1f}{suf}</div>
-                <div style="flex: 2; font-size: 20px; color: #FF6600; font-weight: 800;">{c_ced:.1f}{suf}</div>
-            </div>
-            """
+            <div style="display:flex; align-items:center; background:#fdfdfd; border:1.5px solid #eee; 
+                        padding:12px; border-radius:10px; margin-top:6px; text-align:center;">
+                <div style="flex:1.5; font-weight:900; color:#000; text-align:left; font-size:13px;">{setor.upper()}</div>
+                <div style="flex:1.5; font-size:15px; font-weight:800; color:#000;">{conq_c:.1f}<br><span style="font-size:8px; color:#888;">CONQ</span></div>
+                <div style="flex:1.5; font-size:15px; font-weight:800; color:#FF6600;">{ced_f:.1f}<br><span style="font-size:8px; color:#888;">CEDE</span></div>
+                <div style="flex:1;"><div style="background:{cor_idx(idx_c)}; color:white; padding:4px 6px; border-radius:8px; font-weight:900; font-size:13px;">{idx_c:.1f}</div></div>
+                <div style="flex:0.1; background:#FF6600; height:35px; margin:0 6px; border-radius:2px;"></div>
+                <div style="flex:1;"><div style="background:{cor_idx(idx_f)}; color:white; padding:4px 6px; border-radius:8px; font-weight:900; font-size:13px;">{idx_f:.1f}</div></div>
+                <div style="flex:1.5; font-size:15px; font-weight:800; color:#000;">{conq_f:.1f}<br><span style="font-size:8px; color:#888;">CONQ</span></div>
+                <div style="flex:1.5; font-size:15px; font-weight:800; color:#FF6600;">{ced_c:.1f}<br><span style="font-size:8px; color:#888;">CEDE</span></div>
+            </div>"""
 
         card_html = f"""
-        <div style="background-color: white; border: 4px solid #000; border-radius: 20px; padding: 25px; font-family: 'Arial Black', sans-serif; box-shadow: 12px 12px 0px #FF6600; margin-bottom: 50px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <div style="text-align: center; width: 42%;"><img src="{casa['escudos']['60x60']}" width="65"><br><b style="font-size: 20px; color: #000;">{casa['nome'].upper()}</b></div>
-                <div style="width: 16%; text-align: center;"><b style="font-size: 32px; color: #FF6600;">VS</b></div>
-                <div style="text-align: center; width: 42%;"><img src="{fora['escudos']['60x60']}" width="65"><br><b style="font-size: 20px; color: #000;">{fora['nome'].upper()}</b></div>
-            </div>
+        <div style="background:white; border:4px solid #000; border-radius:20px; padding:25px; 
+                    font-family:'Arial Black',sans-serif; box-shadow:12px 12px 0px #FF6600; margin-bottom:50px;">
             
-            <div style="display: flex; justify-content: space-around; background: #FF6600; color: #000; padding: 10px; border: 3px solid #000; border-radius: 10px; margin-bottom: 15px; font-weight: 900; font-size: 14px;">
-                <div style="text-align: center;">{casa['abreviacao']} TOTAL: {total_conq_casa:.0f}</div>
-                <div style="border-left: 3px solid #000;"></div>
-                <div style="text-align: center;">{fora['abreviacao']} TOTAL: {total_conq_fora:.0f}</div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="text-align:center; width:38%;">
+                    <img src="{casa['escudos']['60x60']}" width="65"><br>
+                    <b style="font-size:20px; color:#000;">{casa['nome'].upper()}</b><br>
+                    <span style="background:#000; color:#FF6600; padding:2px 8px; border-radius:5px; font-size:10px; font-weight:900;">🏠 MANDANTE</span>
+                </div>
+                <div style="width:24%; text-align:center;">
+                    <b style="font-size:32px; color:#FF6600;">VS</b><br>
+                    <div style="background:{cor_conf}; color:white; padding:4px 12px; border-radius:10px; font-size:10px; font-weight:900; margin-top:8px;">
+                        🎯 CONFIANÇA: {confianca}% ({txt_conf})
+                    </div>
+                </div>
+                <div style="text-align:center; width:38%;">
+                    <img src="{fora['escudos']['60x60']}" width="65"><br>
+                    <b style="font-size:20px; color:#000;">{fora['nome'].upper()}</b><br>
+                    <span style="background:#555; color:white; padding:2px 8px; border-radius:5px; font-size:10px; font-weight:900;">🚌 VISITANTE</span>
+                </div>
             </div>
 
-            <div style="background: #000; color: #FF6600; text-align: center; padding: 10px; font-weight: 900; font-size: 16px; border-radius: 8px; margin-bottom: 15px;">
-                ESTRATEGIA: {scout_foco.upper()}
+            <div style="display:flex; justify-content:space-around; background:#FF6600; color:#000; padding:12px; border:3px solid #000; border-radius:10px; margin-bottom:15px; font-weight:900; font-size:15px;">
+                <div style="text-align:center;">{casa['abreviacao']} ÍNDICE<br><span style="font-size:24px;">{total_idx_casa:.1f}</span></div>
+                <div style="border-left:3px solid #000;"></div>
+                <div style="text-align:center;">{fora['abreviacao']} ÍNDICE<br><span style="font-size:24px;">{total_idx_fora:.1f}</span></div>
             </div>
 
-            <div style="display: flex; background: #000; color: white; padding: 12px; border-radius: 5px; font-size: 11px; text-align: center; font-weight: bold;">
-                <div style="flex: 1.5; text-align: left;">SETOR</div>
-                <div style="flex: 2;">{casa['abreviacao']} (CONQ.)</div>
-                <div style="flex: 2; color: #FF6600;">{fora['abreviacao']} (CEDE)</div>
-                <div style="flex: 0.2;"></div>
-                <div style="flex: 2;">{fora['abreviacao']} (CONQ.)</div>
-                <div style="flex: 2; color: #FF6600;">{casa['abreviacao']} (CEDE)</div>
+            <div style="background:#000; color:#FF6600; text-align:center; padding:10px; font-weight:900; font-size:14px; border-radius:8px; margin-bottom:10px;">
+                📊 {scout_foco.upper()} | FÓRMULA: (CONQUISTA × 0.55 + CEDÊNCIA × 0.45) × BÔNUS MANDO
+            </div>
+
+            <div style="display:flex; background:#000; color:white; padding:10px; border-radius:5px; font-size:10px; text-align:center; font-weight:bold;">
+                <div style="flex:1.5; text-align:left;">SETOR</div>
+                <div style="flex:1.5;">{casa['abreviacao']} CONQ</div>
+                <div style="flex:1.5; color:#FF6600;">{fora['abreviacao']} CEDE</div>
+                <div style="flex:1;">IDX</div>
+                <div style="flex:0.1;"></div>
+                <div style="flex:1;">IDX</div>
+                <div style="flex:1.5;">{fora['abreviacao']} CONQ</div>
+                <div style="flex:1.5; color:#FF6600;">{casa['abreviacao']} CEDE</div>
             </div>
 
             {rows_html}
 
-            <div style="margin-top: 30px; border-top: 3px dashed #000; padding-top: 20px;">
-                <div style="text-align: center; font-size: 14px; font-weight: 900; color: #000; margin-bottom: 15px; text-transform: uppercase;">🚀 SUGESTÕES DE ELITE PARA {scout_foco}</div>
-                <div style="display: flex; justify-content: space-between;">
-                    <div style="width: 49%;">{get_top_targets_v72(jogo['clube_casa_id'], foco_key, scout_foco)}</div>
-                    <div style="width: 49%;">{get_top_targets_v72(jogo['clube_visitante_id'], foco_key, scout_foco)}</div>
+            <div style="display:flex; justify-content:center; gap:20px; margin-top:12px; font-size:10px; font-weight:bold;">
+                <span>🟢 ALTA (≥10)</span> <span>🟠 MODERADA (5-10)</span> <span>🔴 BAIXA (&lt;5)</span>
+            </div>
+
+            <div style="margin-top:30px; border-top:3px dashed #000; padding-top:20px;">
+                <div style="text-align:center; font-size:14px; font-weight:900; color:#000; margin-bottom:15px;">
+                    🚀 ALVOS DE ELITE: {scout_foco.upper()} (FORÇA × FRAGILIDADE DO RIVAL)
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <div style="width:48%;">
+                        <div style="text-align:center; font-weight:900; color:#000; margin-bottom:8px; font-size:12px;">🏠 {casa['nome'].upper()}</div>
+                        {get_top_targets(jogo['clube_casa_id'], df_f, foco_key, scout_foco)}
+                    </div>
+                    <div style="width:48%;">
+                        <div style="text-align:center; font-weight:900; color:#000; margin-bottom:8px; font-size:12px;">🚌 {fora['nome'].upper()}</div>
+                        {get_top_targets(jogo['clube_visitante_id'], df_c, foco_key, scout_foco)}
+                    </div>
                 </div>
             </div>
         </div>
         """
-        components.html(card_html, height=900)
-
-
+        components.html(card_html, height=1000)
 
 
 # --- 📈 HISTÓRICO (DESIGN SHADOW ARENA) ---
